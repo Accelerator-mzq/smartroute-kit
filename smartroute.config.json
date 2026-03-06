@@ -1,0 +1,58 @@
+{
+  "_说明": "SmartRoute 统一配置文件 — 所有模型、Key、命令的唯一修改入口",
+  "_文档": "修改此文件后运行 python .pipeline/setup.py 即可同步到所有组件",
+  "models": {
+    "strong": {
+      "_说明": "强模型 — 用于需求分析、设计、Review、疑难问题诊断",
+      "name": "claude-opus-4-6",
+      "provider_type": "anthropic",
+      "api_key": "填入你的 API Key",
+      "base_url": "https://api.anthropic.com",
+      "temperature": 0.2,
+      "max_tokens": 8192
+    },
+    "fast": {
+      "_说明": "快模型 — 用于编码、测试、常规修复、日常提问",
+      "name": "MiniMax-M2.5-highspeed",
+      "provider_type": "openai",
+      "api_key": "填入你的 API Key",
+      "base_url": "https://api.minimaxi.com/v1",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    }
+  },
+  "project": {
+    "compile_command": "make -j4",
+    "test_command": "./bin/system_tests",
+    "unit_test_command": "./bin/unit_tests",
+    "max_retries": 3,
+    "max_loops": 30,
+    "test_timeout_seconds": 120
+  },
+  "documents": {
+    "_说明": "所有文档路径的统一配置入口，路径相对于项目根目录",
+    "requirements_dir": "docs/requirements",
+    "overview_design": "docs/design/overview-design.md",
+    "detailed_design": "docs/design/detailed-design.md",
+    "system_test_cases": "docs/test/system-test-cases.md",
+    "unit_test_cases": "docs/test/unit-test-cases.md",
+    "automation_plan": "docs/test/automation-plan.md",
+    "review_dir": "docs/review",
+    "system_test_code_dir": "tests/system",
+    "unit_test_code_dir": "tests/src"
+  },
+  "proxy": {
+    "_说明": "网络代理配置（翻墙），留空表示不使用",
+    "http_proxy": "",
+    "https_proxy": ""
+  },
+  "ccm": {
+    "_说明": "CCM 路由代理配置，通过 Web UI (http://127.0.0.1:13456) 管理",
+    "port": 13456,
+    "注意事项": [
+      "MiniMax 必须在 CCM 中配置为 openai 类型（非 anthropic 类型）",
+      "Custom Endpoint 填 base_url 的值",
+      "详见 docs/pitfalls.md"
+    ]
+  }
+}
