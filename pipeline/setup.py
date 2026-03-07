@@ -22,6 +22,10 @@ from pathlib import Path
 
 def find_project_root():
     """向上查找包含 smartroute.config.json 的目录"""
+    # 强制标准输出使用 UTF-8，防止在 Windows cmd/powershell 下打印 emoji 报错
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+        
     current = Path.cwd()
     for parent in [current] + list(current.parents):
         if (parent / "smartroute.config.json").exists():
@@ -45,15 +49,35 @@ def load_config(project_root: Path) -> dict:
 
 def generate_env(config: dict, project_root: Path):
     """生成 .env 文件"""
+    env_path = project_root / ".env"
+    existing_commands = {}
+    
+    # 提取已有的项目命令（如果有），防止被覆写
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    if key in ["COMPILE_COMMAND", "TEST_COMMAND", "UNIT_TEST_COMMAND"]:
+                        existing_commands[key] = val
+
     strong = config["models"]["strong"]
     fast = config["models"]["fast"]
     project = config["project"]
     proxy = config.get("proxy", {})
 
+    compile_cmd = existing_commands.get("COMPILE_COMMAND", project['compile_command'])
+    test_cmd = existing_commands.get("TEST_COMMAND", project['test_command'])
+    unit_test_cmd = existing_commands.get("UNIT_TEST_COMMAND", project['unit_test_command'])
+
     lines = [
         "# ============================================",
         "# SmartRoute .env — 由 setup.py 自动生成",
         "# 请勿手动编辑，修改 smartroute.config.json 后重新运行 setup.py",
+        "# 提示: 编译盒测试命令如果在开发过程中被修改，将自动受到保留保护",
         "# ============================================",
         "",
         "# 强模型 (Opus)",
@@ -77,9 +101,9 @@ def generate_env(config: dict, project_root: Path):
         f"MINIMAX_API_KEY={fast['api_key']}",
         "",
         "# 项目配置",
-        f"COMPILE_COMMAND={project['compile_command']}",
-        f"TEST_COMMAND={project['test_command']}",
-        f"UNIT_TEST_COMMAND={project['unit_test_command']}",
+        f"COMPILE_COMMAND={compile_cmd}",
+        f"TEST_COMMAND={test_cmd}",
+        f"UNIT_TEST_COMMAND={unit_test_cmd}",
         f"MAX_RETRIES={project['max_retries']}",
         f"MAX_LOOPS={project['max_loops']}",
         f"TEST_TIMEOUT={project['test_timeout_seconds']}",
@@ -93,14 +117,19 @@ def generate_env(config: dict, project_root: Path):
             f"HTTPS_PROXY={proxy['https_proxy']}",
         ])
 
-    env_path = project_root / ".env"
     with open(env_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"  ✅ .env 已生成")
+    
+    if existing_commands:
+        print(f"  ✅ .env 已生成 (已保护原有动态命令)")
+    else:
+        print(f"  ✅ .env 已生成")
 
 
 def generate_claude_md(config: dict, project_root: Path):
-    """生成 CLAUDE.md"""
+    """生成或更新 CLAUDE.md，保留原有内容和用户的修改"""
+    import re
+    
     strong_name = config["models"]["strong"]["name"]
     fast_name = config["models"]["fast"]["name"]
     project = config["project"]
@@ -110,15 +139,55 @@ def generate_claude_md(config: dict, project_root: Path):
 
     if template_path.exists():
         with open(template_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        content = content.replace("{{STRONG_MODEL}}", strong_name)
-        content = content.replace("{{FAST_MODEL}}", fast_name)
-        content = content.replace("{{COMPILE_COMMAND}}", project["compile_command"])
-        content = content.replace("{{TEST_COMMAND}}", project["test_command"])
-        content = content.replace("{{UNIT_TEST_COMMAND}}", project["unit_test_command"])
+            template_content = f.read()
+            
+        # 准备要替换的最终文本
+        new_content = template_content.replace("{{STRONG_MODEL}}", strong_name)
+        new_content = new_content.replace("{{FAST_MODEL}}", fast_name)
+        new_content = new_content.replace("{{COMPILE_COMMAND}}", project["compile_command"])
+        new_content = new_content.replace("{{TEST_COMMAND}}", project["test_command"])
+        new_content = new_content.replace("{{UNIT_TEST_COMMAND}}", project["unit_test_command"])
+        
+        marker_start = "<!-- SMARTROUTE-CONFIG-START -->"
+        marker_end = "<!-- SMARTROUTE-CONFIG-END -->"
+        new_block = f"{marker_start}\n{new_content}\n{marker_end}"
+
+        if output_path.exists():
+            with open(output_path, "r", encoding="utf-8") as f:
+                existing = f.read()
+            
+            # 如果存在整体标记块，为了不覆盖用户在块内的修改（例如最后几行的自定义命令），
+            # 我们可以选择进行精准正则替换，而不是直接替换整个块
+            
+            # 标记块不存在，说明是老的代码，或者用户自己写的，直接把完全体追加到最后
+            if marker_start not in existing or marker_end not in existing:
+                final_content = existing.rstrip() + "\n\n" + new_block
+                msg = "已追加 (首次注入)"
+            else:
+                final_content = existing
+                # 动态替换模型部分
+                final_content = re.sub(
+                    r"- \*\*strong（强模型）\*\*: .*? —",
+                    f"- **strong（强模型）**: {strong_name} —",
+                    final_content
+                )
+                final_content = re.sub(
+                    r"- \*\*fast（快模型）\*\*: .*? —",
+                    f"- **fast（快模型）**: {fast_name} —",
+                    final_content
+                )
+                
+                # 弱覆盖模式：完全不在 CLAUDE.md 中强制覆写用户/AI摸索出的真实命令（编译、测试等）
+                # 仅在首次生成时从配置读取，后续保留原有文本结构
+                    
+                msg = "已精准更新 (仅更新模型，全面保留业务自定义命令)"
+        else:
+            final_content = new_block
+            msg = "已生成"
+
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"  ✅ CLAUDE.md 已生成")
+            f.write(final_content)
+        print(f"  ✅ CLAUDE.md {msg}")
     else:
         print(f"  ⚠ CLAUDE.md.template 不存在，跳过 CLAUDE.md 生成")
 
