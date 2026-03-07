@@ -1,142 +1,50 @@
-# 项目 AI 协作规则
+# 项目 AI 协作规则（SmartRoute V3.0）
 
-## 模型使用策略
+## 总体分层
 
-本项目使用 SmartRoute 双模型协作方案。
+- 前台指挥部（CLI / 强模型）: Assistant / PM / Architect / QA Lead / Reviewer / DevOps
+- 后台兵工厂（Python Orchestrator）: Planner / Coder / Test Coder / Runtime / Fixer / Debug Expert
 
-### 模型定义
+## 后台角色配置（可由 setup.py 注入）
 
-- **strong（强模型）**: {{STRONG_MODEL}} — 用于需求分析、设计、Review、疑难问题诊断
-- **fast（快模型）**: {{FAST_MODEL}} — 用于编码、测试执行、常规修复
-- **默认**: 除明确指定使用 strong 的阶段外，一律使用 fast
+- `planner`: {{ROLE_PLANNER_MODEL}}
+- `coder`: {{ROLE_CODER_MODEL}}
+- `test_coder`: {{ROLE_TEST_CODER_MODEL}}
+- `fixer`: {{ROLE_FIXER_MODEL}}
+- `debug_expert`: {{ROLE_DEBUG_EXPERT_MODEL}}
 
-### 文档路径规则
+## 生命周期执行顺序（对齐 5-9 步）
 
-> **所有文档路径以 `smartroute.config.json` 中的 `documents` 配置为准，不要使用硬编码路径。**
-> 执行任意命令前，先读取 `smartroute.config.json` 中的 `documents` 配置确定对应的文档路径。
+1. `Planner` 读取 `.smartroute/task.md`，生成 `Execution_Plan.json`
+2. `Coder` 按原子步骤生成业务代码
+3. `Test Coder` 生成系统/单元测试代码
+4. `Runtime` 执行 `cmake/make/ctest`（本地子进程）
+5. `Fixer` 处理编译/测试失败（最多重试 3 次）
+6. 超限后升级 `Debug Expert`，再回落 `Coder` 执行方案
 
-### 各阶段模型分配
+## 执行铁律
 
-| 阶段 | 模型 | 工作层 |
-|------|------|--------|
-| 需求分析 | strong | Claude Code |
-| 设计文档 | strong | Claude Code |
-| 测试文档 | strong | Claude Code |
-| 编码 | fast | Claude Code |
-| 测试编码 | fast | Claude Code |
-| 自动化测试验证 | fast | Claude Code |
-| 自动化测试循环 | fast + strong | Python 脚本 |
-| 代码 Review | strong | Claude Code |
-| Review 报告修改 | fast | Claude Code |
-| 上传 Git | fast | Claude Code |
-| 日常提问 | fast | Claude Code |
-
-### 阶段 1：需求分析（strong）
-
-所有需求分析相关工作必须使用 strong 模型：
-- 需求点提取与整理
-- 规格说明编写（必须包含运行环境、编译器型号和版本号）
-- 需求按版本迭代拆分优先级
-
-### 阶段 2：设计文档（strong）
-
-所有设计文档相关工作必须使用 strong 模型：
-- 概要设计（架构图、模块划分、数据流）
-- 详细设计（类级别、核心接口定义）
-- 明确标注需要单元测试的重点功能接口
-
-### 阶段 3：测试文档（strong）
-
-测试文档的创建必须使用 strong 模型：
-- 根据需求分析文档输出系统测试例
-- 系统测试例和单元测试例严格区分
-- 给出可实施的自动化测试方案
-
-### 阶段 4：编码（fast）
-
-所有编码工作使用 fast 模型：
-- 功能代码编写、编译错误解决、代码重构
-
-### 阶段 5：测试编码（fast）
-
-使用 fast 模型根据详细设计文档和 src/ 模块逻辑编写单元测试代码：
-- 框架: Qt Test（`QTest`）
-- 测试代码存放在 `tests/src/` 目录
-- 代码必须包含详细的中文注释，每个函数上方有固定格式的函数头注释
-- 每个被测模块对应一个测试文件（如 `src/ModuleA.cpp` → `tests/src/test_ModuleA.cpp`）
-- 重点覆盖详细设计中标注的需要单元测试的功能接口
-- 每次修改后确保测试代码编译通过
-
-通过 `/project:test-code` 触发。
-
-### 阶段 6a：自动化测试验证（fast）
-
-使用 fast 模型逐条验证自动化测试方案的可行性：
-- 读取 `docs/test/system-test-cases.md` 和 `docs/test/automation-plan.md`
-- 按测试项逐条执行，确认自动化方案能落地
-- 方案实施失败时尝试修复（最多 3 轮），仍失败则标记为手工测试
-- 输出报告到 `.pipeline/test-auto-report.md`
-
-通过 `/project:test-auto` 触发。建议在 test-code 之后、test-loop 之前执行。
-
-### 阶段 6b：自动化测试循环（Python 脚本）
-
-此阶段通过 `/project:test-loop` 触发 Python 脚本自动执行。
-脚本内部自动管理模型切换：fast 超限后自动升级 strong，strong 给方案后自动降回 fast。
-
-当通过 `--bug-report` 触发漏测反思时，流程为：
-1. 漏测反思 → 更新系统测试用例文档
-2. **自动生成/更新对应的自动化测试方案**（`docs/test/automation-plan.md`）
-3. 回归测试验证
-
-### 阶段 7-9：Git / Review / 修改
-
-- 上传 Git → fast
-- 代码 Review → strong，输出报告到 docs/review/
-- Review 修改 → fast
-
-## 升级/降级协议（Claude Code 内手动场景）
-
-### 从 fast 升级到 strong 的触发条件
-1. 连续 3 轮未能解决同一问题
-2. 问题定位无进展
-3. 需要分析漏测原因或更新测试文档
-
-### 从 strong 降级到 fast 的触发条件
-1. strong 已确定问题原因并给出修改方案
-2. 进入代码修改或回归测试阶段
-
-## 模型状态报告规则
-
-在执行操作时，第一行报告当前状态：
-
-格式：`🤖 [当前模型: xxx] [当前阶段: xxx] [任务: xxx]`
-
-建议升级时：`⚠️ [建议切换模型: fast → strong] [原因: xxx]`
-
-切换完成后：`✅ [模型已切换: strong] [继续任务: xxx]`
+1. CLI 负责需求与决策，不做循环编译/测试。
+2. Python 流水线负责执行、试错、归档。
+3. 任务交接文件必须包含：
+   - `[Task Objective]`
+   - `[Strict Rules]`
+   - `[Target Files]`
+4. 执行命令：
+   - `python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md`
 
 ## 文件约定
 
 | 文件/目录 | 用途 |
 |-----------|------|
-| `smartroute.config.json` | **统一配置入口（模型/Key/文档路径只改这里）** |
-| `documents.requirements_dir` | 需求分析文档目录 |
-| `documents.overview_design` | 概要设计文档 |
-| `documents.detailed_design` | 详细设计文档 |
-| `documents.system_test_cases` | 系统测试用例 |
-| `documents.unit_test_cases` | 单元测试用例 |
-| `documents.automation_plan` | 自动化测试方案 |
-| `documents.review_dir` | Review 报告目录 |
-| `documents.system_test_code_dir` | 系统测试代码目录 |
-| `documents.unit_test_code_dir` | 单元测试代码目录（Qt Test） |
-| `.pipeline/` | 自动化脚本和日志 |
+| `.smartroute/task.md` | CLI → Python 的任务交接书 |
+| `.smartroute/Execution_Plan.json` | Planner 产出的原子执行图 |
+| `.pipeline/context/` | Context Manager |
+| `.pipeline/logs/` | Observability 日志与 trace |
+| `.smartroute/artifacts/` | Artifact Manager 工件归档 |
 
 ## 项目构建信息
 
 - 编译命令: {{COMPILE_COMMAND}}
 - 系统测试命令: {{TEST_COMMAND}}
 - 单元测试命令: {{UNIT_TEST_COMMAND}}
-
-> **⚠️ [重要配置回写规则（AI 必读）]**：
-> 如果你在上述任何阶段（如编码、补充测试）摸索跑通了新的编译命令、系统测试命令或单元测试命令，你**必须主动更新**项目根目录下的 `.env` 文件以及本 `CLAUDE.md` 文件中的“项目构建信息”区块。这是为了确保 `test_loop.py` 自动化测试流转时能拉起正确的最新指令。

@@ -15,7 +15,7 @@ NC='\033[0m'
 
 echo ""
 echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}${GREEN}║  SmartRoute v1.0 — 任务模型智能调度方案 初始化   ║${NC}"
+echo -e "${BOLD}${GREEN}║  SmartRoute v3.0 — 任务模型智能调度方案 初始化   ║${NC}"
 echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -24,7 +24,7 @@ echo -e "${CYAN}项目目录: $(pwd)${NC}"
 
 # 创建目录
 echo -e "\n${BOLD}[1/5] 创建目录结构${NC}"
-mkdir -p docs/{requirements,design,test,review} .claude/commands .pipeline
+mkdir -p docs/{requirements,design,test,review} .claude/commands .pipeline/{context,logs} .smartroute/artifacts
 
 # 复制统一配置文件
 echo -e "${BOLD}[2/5] 安装配置文件${NC}"
@@ -69,7 +69,13 @@ EOF
 
 # .gitignore
 touch .gitignore
-for entry in ".env" ".pipeline/*.log" ".pipeline/last-state.json" ".pipeline/test-loop-report.md"; do
+for entry in \
+    ".env" \
+    ".pipeline/logs/*.log" \
+    ".pipeline/logs/trace.jsonl" \
+    ".pipeline/last-state.json" \
+    ".pipeline/test-loop-report.md" \
+    ".smartroute/artifacts/"; do
     grep -q "$entry" .gitignore 2>/dev/null || echo "$entry" >> .gitignore
 done
 
@@ -79,5 +85,6 @@ echo -e "${BOLD}  初始化完成！接下来：${NC}"
 echo ""
 echo -e "  1. 编辑 ${CYAN}smartroute.config.json${NC} — 填入 API Key 和项目命令"
 echo -e "  2. 运行 ${CYAN}python .pipeline/setup.py${NC} — 同步生成 .env 和 CLAUDE.md"
-echo -e "  3. 配置 CCM Web UI (http://127.0.0.1:13456) — 见 docs/pitfalls.md"
+echo -e "  3. 创建 ${CYAN}.smartroute/task.md${NC} — 写入 Task Objective/Strict Rules/Target Files"
+echo -e "  4. 运行 ${CYAN}python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md${NC}"
 echo -e "${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

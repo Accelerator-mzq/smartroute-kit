@@ -1,0 +1,38 @@
+# =========================
+# Secrets / credentials
+# =========================
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# =========================
+# Runtime output (SmartRoute)
+# =========================
+.pipeline/
+.smartroute/
+
+# =========================
+# Python cache / build
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# =========================
+# Logs / temp files
+# =========================
+*.log
+*.tmp
+*.temp
+
+# =========================
+# IDE / OS
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
