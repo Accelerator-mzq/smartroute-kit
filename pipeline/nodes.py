@@ -3,14 +3,108 @@ nodes.py — 执行节点实现
 SmartRoute: 基于 Claude Code 的任务模型智能调度方案
 
 每个节点: 接收 State → 调用模型或本地命令 → 返回更新后的 State
-模型调用通过 call_model("strong"/"fast") 自动从 smartroute.config.json 读取配置
+模型调用通过 call_model("planner/coder/test_coder/fixer/debug_expert")
+自动从 smartroute.config.json 读取配置
 """
 
+import json
 import os
+import re
 
 from state import TestLoopState
 from model_caller import call_model
 from runners import run_compile, run_tests, read_file_safe, write_file_safe
+from task_graph import TaskGraphEngine
+
+
+def _set_current_role(state: TestLoopState, role: str):
+    state["current_role"] = role
+    # backward-compatible field
+    state["current_model"] = role
+
+
+def _normalize_allowed_paths(project_dir: str, allowed_files) -> set:
+    if not allowed_files:
+        return set()
+    abs_project = os.path.abspath(project_dir)
+    normalized = set()
+    for f in allowed_files:
+        if os.path.isabs(f):
+            p = os.path.abspath(f)
+        else:
+            p = os.path.abspath(os.path.join(project_dir, f))
+        if p.startswith(abs_project):
+            normalized.add(p)
+    return normalized
+
+
+def _parse_and_write_code_files(response: str, project_dir: str, allowed_files=None) -> int:
+    """
+    解析模型输出中的 File + 代码块并写入文件。
+    仅允许写入 project_dir 内文件；如果设置 allowed_files，则仅允许写入清单内文件。
+    """
+    pattern = r"File:\s*(.+?)\s*\n\s*```(?:[A-Za-z0-9_+.-]+)?\s*\n(.*?)```"
+    matches = re.findall(pattern, response, re.DOTALL)
+    abs_project = os.path.abspath(project_dir)
+    allowed_abs = _normalize_allowed_paths(project_dir, allowed_files)
+
+    files_written = 0
+    for filepath_raw, code_content in matches:
+        filepath_raw = filepath_raw.strip()
+        if os.path.isabs(filepath_raw):
+            abs_path = os.path.abspath(filepath_raw)
+        else:
+            abs_path = os.path.abspath(os.path.join(project_dir, filepath_raw))
+
+        if not abs_path.startswith(abs_project):
+            print(f"  ⚠️ 跳过项目外文件: {filepath_raw}")
+            continue
+
+        if allowed_abs and not any(abs_path == p or abs_path.startswith(p + os.sep) for p in allowed_abs):
+            print(f"  ⚠️ 跳过非目标文件: {filepath_raw}")
+            continue
+
+        write_file_safe(abs_path, code_content.strip() + "\n")
+        print(f"  📝 写入: {os.path.relpath(abs_path, abs_project)}")
+        files_written += 1
+
+    return files_written
+
+
+def _build_task_file_context(state: TestLoopState, max_chars: int = 8000) -> str:
+    target_files = state.get("task_target_files", [])
+    if not target_files:
+        return ""
+
+    chunks = []
+    for rel_path in target_files[:20]:
+        abs_path = rel_path
+        if not os.path.isabs(abs_path):
+            abs_path = os.path.join(state["project_dir"], rel_path)
+        content = read_file_safe(abs_path, max_chars=2500)
+        chunks.append(f"--- File: {rel_path} ---\n{content}")
+        if sum(len(c) for c in chunks) > max_chars:
+            break
+    return "\n\n".join(chunks)
+
+
+def _extract_json_from_response(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = text.strip()
+    if cleaned.startswith("{") and cleaned.endswith("}"):
+        return cleaned
+    code_block = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
+    if code_block:
+        return code_block.group(1).strip()
+    generic_block = re.search(r"```[\w-]*\s*(\{[\s\S]*?\})\s*```", text)
+    if generic_block:
+        return generic_block.group(1).strip()
+    first = text.find("{")
+    last = text.rfind("}")
+    if first != -1 and last != -1 and last > first:
+        return text[first:last + 1]
+    return ""
 
 
 def compile_node(state: TestLoopState) -> TestLoopState:
@@ -32,7 +126,8 @@ def test_node(state: TestLoopState, test_type: str = "system") -> TestLoopState:
     """执行测试"""
     cmd = state["test_command"] if test_type == "system" else state["unit_test_command"]
     print(f"🚀 [测试] 执行 {test_type} 测试: {cmd}")
-    result, log = run_tests(state["project_dir"], cmd)
+    timeout = int(state.get("test_timeout_seconds", 120))
+    result, log = run_tests(state["project_dir"], cmd, timeout=timeout)
     state["test_results"] = result
     state["test_error_log"] = log if result != "PASS" else ""
     if result == "PASS":
@@ -44,10 +139,202 @@ def test_node(state: TestLoopState, test_type: str = "system") -> TestLoopState:
     return state
 
 
-def fast_fix_node(state: TestLoopState) -> TestLoopState:
-    """快模型修复代码"""
-    print(f"🔧 [Fast] 第 {state['retry_count']}/{state['max_retries']} 次修复尝试...")
-    state["current_model"] = "fast"
+def planner_generate_execution_plan_node(state: TestLoopState) -> TestLoopState:
+    """Planner: 读取 task.md，输出 Execution_Plan.json"""
+    print("🧭 [Planner] 生成原子化执行计划...")
+    _set_current_role(state, "planner")
+
+    objective = state.get("task_objective", "").strip() or "未提供任务目标"
+    rules = state.get("task_rules", "").strip() or "遵循现有项目编码规范"
+    target_files = state.get("task_target_files", [])
+    files_text = "\n".join(f"- {f}" for f in target_files) if target_files else "- （未指定）"
+
+    system_prompt = """你是 SmartRoute Planner（规划师）。
+请基于任务目标拆解出可执行原子步骤，输出严格 JSON，不要输出解释文字。
+JSON 格式:
+{
+  "nodes":[
+    {"id":"1","task":"...","role":"coder"},
+    {"id":"2","task":"...","role":"test_coder"},
+    {"id":"3","task":"...","role":"runtime"},
+    {"id":"4","task":"...","role":"fixer"},
+    {"id":"5","task":"...","role":"debug_expert"}
+  ],
+  "edges":[
+    {"from":"1","to":"2"},
+    {"from":"2","to":"3"},
+    {"from":"3","to":"4"},
+    {"from":"4","to":"5"}
+  ]
+}
+
+约束:
+1. role 仅允许: coder/test_coder/runtime/fixer/debug_expert
+2. 节点是原子步骤，不要写成宏观描述
+3. 必须包含 runtime 节点和 fixer 节点"""
+
+    user_message = f"""[Task Objective]
+{objective}
+
+[Strict Rules]
+{rules}
+
+[Target Files]
+{files_text}
+
+请输出 Execution Plan JSON。"""
+
+    response = call_model("planner", system_prompt, user_message, max_tokens=4096)
+    if response.startswith("[ERROR]"):
+        print(f"  ⚠️ Planner 调用失败，使用默认计划: {response[:160]}")
+        graph = TaskGraphEngine.create_default(objective, target_files)
+        state["execution_plan"] = graph.to_dict()
+    else:
+        json_text = _extract_json_from_response(response)
+        try:
+            plan = json.loads(json_text)
+            plan_path = state.get("execution_plan_path") or os.path.join(
+                state["project_dir"], ".smartroute", "Execution_Plan.json"
+            )
+            os.makedirs(os.path.dirname(plan_path), exist_ok=True)
+            with open(plan_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {"nodes": plan.get("nodes", []), "edges": plan.get("edges", [])},
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            checked = TaskGraphEngine.from_json_file(plan_path)
+            state["execution_plan"] = checked.to_dict()
+        except Exception as e:
+            print(f"  ⚠️ Planner 输出非法，使用默认计划: {e}")
+            fallback = TaskGraphEngine.create_default(objective, target_files)
+            state["execution_plan"] = fallback.to_dict()
+
+    if state.get("execution_plan_path"):
+        with open(state["execution_plan_path"], "w", encoding="utf-8") as f:
+            json.dump(state["execution_plan"], f, ensure_ascii=False, indent=2)
+        print(f"  📝 已输出计划: {state['execution_plan_path']}")
+
+    return state
+
+
+def coder_generate_from_plan_node(state: TestLoopState) -> TestLoopState:
+    """Coder: 严格按 Execution_Plan 生成/更新业务代码"""
+    print("🧩 [Coder] 根据 Execution Plan 生成代码...")
+    _set_current_role(state, "coder")
+
+    objective = state.get("task_objective", "").strip() or "未提供任务目标"
+    rules = state.get("task_rules", "").strip() or "遵循现有项目编码规范"
+    target_files = state.get("task_target_files", [])
+    files_text = "\n".join(f"- {f}" for f in target_files) if target_files else "- （未指定，按任务目标自定）"
+    existing_context = _build_task_file_context(state)
+    execution_plan = state.get("execution_plan", {})
+
+    system_prompt = """你是 SmartRoute Coder（主程序员）。
+请严格按照 Execution_Plan 的原子步骤输出代码修改，格式必须为：
+File: relative/path/to/file.ext
+```lang
+完整文件内容
+```
+
+要求：
+1. 只输出需要创建或修改的文件
+2. 默认只改目标文件清单中的文件
+3. 不要输出解释文字"""
+
+    user_message = f"""[Task Objective]
+{objective}
+
+[Strict Rules]
+{rules}
+
+[Execution Plan]
+{json.dumps(execution_plan, ensure_ascii=False, indent=2) if execution_plan else "（无）"}
+
+[Target Files]
+{files_text}
+
+[Existing File Context]
+{existing_context if existing_context else "（目标文件当前不存在或未读取）"}
+
+请输出可直接落盘的文件内容。"""
+
+    response = call_model("coder", system_prompt, user_message, max_tokens=8192)
+    state["current_code"] = response
+
+    if response.startswith("[ERROR]"):
+        print(f"  ❌ Coder 生成失败: {response[:200]}")
+        return state
+
+    files_written = _parse_and_write_code_files(
+        response,
+        state["project_dir"],
+        allowed_files=target_files or None,
+    )
+    if files_written > 0:
+        state["modified_files"] = list(set(state["modified_files"] + target_files))
+        print(f"  ✨ Coder 已生成/更新 {files_written} 个文件")
+    else:
+        print("  ⚠️ 未解析到有效代码块，请检查任务描述或模型输出格式")
+    return state
+
+
+def test_coder_generate_from_plan_node(state: TestLoopState) -> TestLoopState:
+    """Test Coder: 按执行计划生成系统测试/单元测试代码骨架"""
+    print("🧪 [Test Coder] 根据 Execution Plan 生成测试代码...")
+    _set_current_role(state, "test_coder")
+
+    execution_plan = state.get("execution_plan", {})
+    target_files = state.get("task_target_files", [])
+    code_context = _build_task_file_context(state, max_chars=6000)
+
+    system_prompt = """你是 SmartRoute Test Coder。
+请根据 Execution Plan 和目标业务代码，生成测试代码，输出格式必须为:
+File: tests/.../xxx.cpp
+```cpp
+完整文件内容
+```
+
+约束:
+1. 输出路径只能在 tests/system 或 tests/src 下
+2. 优先为本轮目标业务文件生成对应测试
+3. 测试必须包含正常路径与异常路径
+4. 不要输出解释文本"""
+
+    user_message = f"""[Execution Plan]
+{json.dumps(execution_plan, ensure_ascii=False, indent=2) if execution_plan else "（无）"}
+
+[Target Files]
+{target_files if target_files else "（无）"}
+
+[Current Code Context]
+{code_context if code_context else "（无）"}
+
+请输出测试代码。"""
+
+    response = call_model("test_coder", system_prompt, user_message, max_tokens=8192)
+    if response.startswith("[ERROR]"):
+        print(f"  ⚠️ Test Coder 生成失败: {response[:200]}")
+        state["system_test_code_generated"] = False
+        state["unit_test_code_generated"] = False
+        return state
+
+    files_written = _parse_and_write_test_files(response, state["project_dir"], state["system_test_code_dir"])
+    generated = files_written > 0
+    state["system_test_code_generated"] = generated
+    state["unit_test_code_generated"] = generated
+    if generated:
+        print(f"  ✨ Test Coder 已生成/更新 {files_written} 个测试文件")
+    else:
+        print("  ⚠️ 未解析到有效测试代码文件")
+    return state
+
+
+def fixer_node(state: TestLoopState) -> TestLoopState:
+    """Fixer 角色修复代码"""
+    print(f"🔧 [Fixer] 第 {state['retry_count']}/{state['max_retries']} 次修复尝试...")
+    _set_current_role(state, "fixer")
 
     error_context = (
         f"【编译错误日志】:\n{state['compile_error_log']}"
@@ -55,6 +342,9 @@ def fast_fix_node(state: TestLoopState) -> TestLoopState:
         else f"【测试错误日志】:\n{state.get('test_error_log', '')}"
     )
     design_doc = read_file_safe(state["design_doc_path"], max_chars=5000)
+    task_rules = state.get("task_rules", "")
+    target_files = state.get("task_target_files", [])
+    target_file_context = _build_task_file_context(state, max_chars=6000)
 
     system_prompt = """你是一个高效的开发工程师，负责根据错误日志修复代码。
 修复规则：
@@ -68,19 +358,36 @@ def fast_fix_node(state: TestLoopState) -> TestLoopState:
 【设计文档参考】:
 {design_doc[:3000]}
 
+【任务硬约束】:
+{task_rules if task_rules else "（无）"}
+
+【目标文件】:
+{target_files if target_files else "（未限制）"}
+
+【目标文件当前内容】:
+{target_file_context if target_file_context else "（无）"}
+
 请分析问题并给出修复代码:"""
 
-    response = call_model("fast", system_prompt, user_message)
+    response = call_model("fixer", system_prompt, user_message)
     state["current_code"] = response
+    if not response.startswith("[ERROR]"):
+        files_written = _parse_and_write_code_files(
+            response,
+            state["project_dir"],
+            allowed_files=target_files or None,
+        )
+        if files_written == 0:
+            print("  ⚠️ 修复响应未解析到可落盘代码")
     return state
 
 
-def strong_diagnose_node(state: TestLoopState) -> TestLoopState:
-    """强模型深度诊断"""
-    print("🧠 [Strong] 快模型修复超限，强模型介入深度诊断...")
-    state["current_model"] = "strong"
+def debug_expert_diagnose_node(state: TestLoopState) -> TestLoopState:
+    """Debug Expert 角色深度诊断"""
+    print("🧠 [Debug Expert] fixer 角色修复超限，debug_expert 介入深度诊断...")
+    _set_current_role(state, "debug_expert")
     state["escalation_history"].append(
-        f"[{state['current_phase']}] retry={state['retry_count']} → 升级到强模型"
+        f"[{state['current_phase']}] retry={state['retry_count']} → 升级到 debug_expert"
     )
 
     design_doc = read_file_safe(state["design_doc_path"], max_chars=8000)
@@ -105,37 +412,52 @@ def strong_diagnose_node(state: TestLoopState) -> TestLoopState:
 
 请给出诊断和修改方案:"""
 
-    response = call_model("strong", system_prompt, user_message)
-    state["opus_diagnosis_plan"] = response
-    state["opus_diagnosis_used"] = True
+    task_appendix = ""
+    if state.get("task_objective"):
+        task_appendix = (
+            f"\n【任务目标】:\n{state.get('task_objective', '')}\n"
+            f"【任务约束】:\n{state.get('task_rules', '')}\n"
+            f"【目标文件】:\n{state.get('task_target_files', [])}\n"
+        )
+    response = call_model("debug_expert", system_prompt, user_message + task_appendix)
+    state["debug_diagnosis_plan"] = response
+    state["debug_diagnosis_used"] = True
     state["retry_count"] = 0
     print(f"  💡 诊断完成 (方案长度: {len(response)} 字符)")
     return state
 
 
-def fast_apply_fix_node(state: TestLoopState) -> TestLoopState:
-    """快模型执行强模型的修复方案"""
-    print("🛠️  [Fast] 根据强模型方案执行修改...")
-    state["current_model"] = "fast"
+def coder_apply_debug_fix_node(state: TestLoopState) -> TestLoopState:
+    """Coder 角色执行 debug_expert 方案"""
+    print("🛠️  [Coder] 根据 debug_expert 方案执行修改...")
+    _set_current_role(state, "coder")
 
     system_prompt = """你是一个开发工程师。首席架构师已给出诊断与修改方案。
 严格按照方案执行修改，输出修改后的完整代码，确保可编译。"""
 
-    user_message = f"""【架构师方案】:\n{state['opus_diagnosis_plan']}
+    user_message = f"""【诊断方案】:\n{state['debug_diagnosis_plan']}
 【当前代码】:\n{state.get('current_code', '')[:5000]}
 
 请严格落实方案:"""
 
-    response = call_model("fast", system_prompt, user_message)
+    response = call_model("coder", system_prompt, user_message)
     state["current_code"] = response
-    state["opus_diagnosis_plan"] = ""
+    state["debug_diagnosis_plan"] = ""
+    if not response.startswith("[ERROR]"):
+        files_written = _parse_and_write_code_files(
+            response,
+            state["project_dir"],
+            allowed_files=state.get("task_target_files") or None,
+        )
+        if files_written == 0:
+            print("  ⚠️ 执行方案后未解析到可落盘代码")
     return state
 
 
-def strong_reflection_node(state: TestLoopState) -> TestLoopState:
-    """强模型漏测反思 — 同时更新系统测试用例和单元测试用例"""
-    print("🧠 [Strong] 执行漏测反思机制...")
-    state["current_model"] = "strong"
+def debug_expert_reflection_node(state: TestLoopState) -> TestLoopState:
+    """debug_expert 角色漏测反思 — 同时更新系统测试用例和单元测试用例"""
+    print("🧠 [Debug Expert] 执行漏测反思机制...")
+    _set_current_role(state, "debug_expert")
 
     system_test_doc = read_file_safe(state["system_test_cases_path"])
     unit_test_doc = read_file_safe(state["unit_test_cases_path"])
@@ -164,7 +486,7 @@ def strong_reflection_node(state: TestLoopState) -> TestLoopState:
 
 请分别输出更新后的系统测试用例和单元测试用例文档:"""
 
-    response = call_model("strong", system_prompt, user_message, max_tokens=8192)
+    response = call_model("debug_expert", system_prompt, user_message, max_tokens=8192)
 
     if not response.startswith("[ERROR]"):
         # 解析两份文档
@@ -205,10 +527,10 @@ def _parse_reflection_output(response: str):
     return sys_doc, unit_doc
 
 
-def strong_update_automation_plan_node(state: TestLoopState) -> TestLoopState:
-    """强模型根据更新后的系统+单元测试用例，生成/更新自动化测试方案"""
-    print("🧠 [Strong] 更新自动化测试方案...")
-    state["current_model"] = "strong"
+def debug_expert_update_automation_plan_node(state: TestLoopState) -> TestLoopState:
+    """debug_expert 角色根据更新后的系统+单元测试用例，生成/更新自动化测试方案"""
+    print("🧠 [Debug Expert] 更新自动化测试方案...")
+    _set_current_role(state, "debug_expert")
 
     system_test_cases = read_file_safe(state["system_test_cases_path"])
     unit_test_cases = read_file_safe(state["unit_test_cases_path"])
@@ -245,7 +567,7 @@ def strong_update_automation_plan_node(state: TestLoopState) -> TestLoopState:
 
 请输出更新后的完整自动化测试方案文档:"""
 
-    response = call_model("strong", system_prompt, user_message, max_tokens=8192)
+    response = call_model("debug_expert", system_prompt, user_message, max_tokens=8192)
 
     if not response.startswith("[ERROR]"):
         write_file_safe(state["automation_plan_path"], response)
@@ -257,14 +579,14 @@ def strong_update_automation_plan_node(state: TestLoopState) -> TestLoopState:
     return state
 
 
-def fast_generate_test_code_node(state: TestLoopState, test_type: str = "unit") -> TestLoopState:
+def test_coder_generate_test_code_node(state: TestLoopState, test_type: str = "unit") -> TestLoopState:
     """
-    快模型根据自动化测试方案生成/更新测试代码。
+    test_coder 角色根据自动化测试方案生成/更新测试代码。
     test_type: "system" 生成系统测试代码, "unit" 生成单元测试代码(Qt Test)
     """
     type_label = "系统测试" if test_type == "system" else "单元测试"
-    print(f"🔧 [Fast] 根据自动化方案生成{type_label}代码...")
-    state["current_model"] = "fast"
+    print(f"🔧 [Test Coder] 根据自动化方案生成{type_label}代码...")
+    _set_current_role(state, "test_coder")
 
     import glob
 
@@ -350,7 +672,7 @@ File: {code_dir_rel}/test_XxxXxx.cpp
 
 请根据自动化测试方案，生成或更新对应的{type_label}代码:"""
 
-    response = call_model("fast", system_prompt, user_message, max_tokens=8192)
+    response = call_model("test_coder", system_prompt, user_message, max_tokens=8192)
 
     state_key = f"{test_type}_test_code_generated"
     if not response.startswith("[ERROR]"):
@@ -397,3 +719,12 @@ def _parse_and_write_test_files(response: str, project_dir: str, test_code_dir: 
         files_written += 1
 
     return files_written
+
+
+# --- Backward compatibility aliases ---
+test_fix_node = fixer_node
+debug_diagnose_node = debug_expert_diagnose_node
+worker_apply_fix_node = coder_apply_debug_fix_node
+debug_reflection_node = debug_expert_reflection_node
+debug_update_automation_plan_node = debug_expert_update_automation_plan_node
+test_generate_test_code_node = test_coder_generate_test_code_node

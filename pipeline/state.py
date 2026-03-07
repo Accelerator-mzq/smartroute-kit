@@ -3,9 +3,7 @@ state.py — 自动化测试循环的状态定义
 SmartRoute: Claude Code + Python 编排脚本整合方案
 """
 
-from typing import TypedDict, Optional, Dict, List
-from dataclasses import dataclass, field
-from datetime import datetime
+from typing import TypedDict, Optional, List
 import json
 import os
 
@@ -18,6 +16,7 @@ class TestLoopState(TypedDict):
     compile_command: str            # 编译命令 (如 "make -j4" 或 "mingw32-make")
     test_command: str               # 测试执行命令 (如 "./bin/system_tests")
     unit_test_command: str          # 单元测试命令
+    test_timeout_seconds: int       # 测试命令超时阈值
 
     # ── 文档路径 ──
     system_test_cases_path: str     # 系统测试例文档路径
@@ -40,15 +39,24 @@ class TestLoopState(TypedDict):
     current_code: str               # 当前相关代码内容
     modified_files: List[str]       # 本轮修改的文件列表
 
+    # ── V3 任务握手上下文 ──
+    task_file: str                  # 任务说明文件路径
+    task_objective: str             # 任务目标
+    task_rules: str                 # 强约束规则
+    task_target_files: List[str]    # 目标文件列表
+    execution_plan_path: str        # 任务图执行计划文件路径
+    execution_plan: dict            # 任务拆解后的执行计划内容
+
     # ── 升级控制 ──
     retry_count: int                # 当前重试次数
     max_retries: int                # 最大重试次数 (替代15分钟超时)
-    current_model: str              # 当前模型 ("minimax" / "opus")
+    current_role: str               # 当前角色 (planner/coder/test_coder/fixer/debug_expert/runtime)
+    current_model: str              # 兼容字段，等同 current_role
     escalation_history: List[str]   # 升级历史记录
 
-    # ── Opus 诊断 ──
-    opus_diagnosis_plan: str        # Opus 给出的诊断方案
-    opus_diagnosis_used: bool       # 是否已使用 Opus 方案
+    # ── Debug 诊断 ──
+    debug_diagnosis_plan: str       # debug_expert 角色给出的诊断方案
+    debug_diagnosis_used: bool      # 是否已使用 debug_expert 方案
 
     # ── 漏测反思 ──
     user_bug_report: Optional[str]  # 用户提交的 Bug 描述
@@ -63,6 +71,12 @@ class TestLoopState(TypedDict):
     loop_count: int                 # 总循环次数 (防止无限循环)
     max_loop_count: int             # 最大总循环次数
     final_status: str               # 最终状态 ("success" / "manual_intervention" / "aborted")
+    context_dir: str                # 上下文目录
+    task_context_path: str          # 任务上下文文件
+    runtime_logs_path: str          # 运行日志上下文文件
+    artifact_execution_id: str      # 工件执行 ID
+    artifact_execution_dir: str     # 工件执行目录
+    log_dir: str                    # 观测日志目录
 
 
 def load_documents_config(project_dir: str) -> dict:
@@ -101,9 +115,22 @@ def create_initial_state(
     compile_command: str = "make -j4",
     test_command: str = "./bin/system_tests",
     unit_test_command: str = "./bin/unit_tests",
+    test_timeout_seconds: int = 120,
     max_retries: int = 3,
     max_loop_count: int = 30,
-    user_bug_report: Optional[str] = None
+    user_bug_report: Optional[str] = None,
+    task_file: str = "",
+    task_objective: str = "",
+    task_rules: str = "",
+    task_target_files: Optional[List[str]] = None,
+    execution_plan_path: str = "",
+    execution_plan: Optional[dict] = None,
+    context_dir: str = "",
+    task_context_path: str = "",
+    runtime_logs_path: str = "",
+    artifact_execution_id: str = "",
+    artifact_execution_dir: str = "",
+    log_dir: str = "",
 ) -> TestLoopState:
     """创建初始状态，文档路径从 smartroute.config.json 读取"""
     docs = load_documents_config(project_dir)
@@ -114,6 +141,7 @@ def create_initial_state(
         compile_command=compile_command,
         test_command=test_command,
         unit_test_command=unit_test_command,
+        test_timeout_seconds=test_timeout_seconds,
         system_test_cases_path=os.path.join(abs_dir, docs["system_test_cases"]),
         unit_test_cases_path=os.path.join(abs_dir, docs["unit_test_cases"]),
         automation_plan_path=os.path.join(abs_dir, docs["automation_plan"]),
@@ -127,12 +155,19 @@ def create_initial_state(
         current_test_item="",
         current_code="",
         modified_files=[],
+        task_file=task_file,
+        task_objective=task_objective,
+        task_rules=task_rules,
+        task_target_files=task_target_files or [],
+        execution_plan_path=execution_plan_path,
+        execution_plan=execution_plan or {},
         retry_count=0,
         max_retries=max_retries,
-        current_model="minimax",
+        current_role="planner",
+        current_model="planner",
         escalation_history=[],
-        opus_diagnosis_plan="",
-        opus_diagnosis_used=False,
+        debug_diagnosis_plan="",
+        debug_diagnosis_used=False,
         user_bug_report=user_bug_report,
         reflection_done=False,
         reflection_result="",
@@ -143,6 +178,12 @@ def create_initial_state(
         loop_count=0,
         max_loop_count=max_loop_count,
         final_status="",
+        context_dir=context_dir,
+        task_context_path=task_context_path,
+        runtime_logs_path=runtime_logs_path,
+        artifact_execution_id=artifact_execution_id,
+        artifact_execution_dir=artifact_execution_dir,
+        log_dir=log_dir,
     )
 
 

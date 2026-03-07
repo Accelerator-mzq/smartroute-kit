@@ -1,47 +1,25 @@
-# 测试文档生成（Opus 模型）
+﻿# 阶段4：测试任务交接（QA Lead / CLI）
 
-> **路径规则**：所有文档路径以 `smartroute.config.json` 中的 `documents` 配置为准，不要使用硬编码路径。
+> 目标：生成交接书 `.smartroute/task.md`，作为 Python 兵工厂入口。
 
-## 第一步：读取配置
-1. 读取 `smartroute.config.json` 中 `documents` 配置，确定以下路径：
-   - `requirements_dir`：需求文档目录
-   - `detailed_design`：详细设计文档路径
-   - `system_test_cases`：系统测试用例输出路径
-   - `unit_test_cases`：单元测试用例输出路径
-   - `automation_plan`：自动化测试方案输出路径
+执行：
+1. 读取 `documents.detailed_design`、系统/单元测试文档路径。
+2. 明确本轮最小可交付范围。
+3. 生成 `.smartroute/task.md`，必须包含：
 
-## 第二步：读取输入文档
-1. 读取 `documents.requirements_dir` 下的需求文档
-2. 读取 `documents.detailed_design` 指定的设计文档
-3. 特别关注详细设计中标注了 `[需单元测试]` 的接口
+```markdown
+[Task Objective]
+...
 
-## 第三步：生成系统测试用例
-输出到 `documents.system_test_cases` 指定的路径：
-1. 严格按照需求点生成测试例，确保每个需求至少有一条测试例
-2. 每条测试例包含：编号、测试项、前置条件、测试步骤、预期结果、优先级、是否可自动化
-3. 使用表格格式，方便后续 Python 脚本和 Claude Code 自动读取
-4. 侧重端到端功能验证和集成场景
-5. 包含正常路径和异常路径的测试
+[Strict Rules]
+...
 
-## 第四步：生成单元测试用例
-输出到 `documents.unit_test_cases` 指定的路径：
-1. 针对详细设计中标注 `[需单元测试]` 的接口生成测试例
-2. 每条测试例包含：编号、被测函数/类、测试场景、输入数据、预期输出、优先级
-3. 覆盖正常输入、边界值、异常输入三类场景
-4. 使用表格格式
+[Target Files]
+- src/...
+```
 
-## 第五步：生成自动化测试方案
-输出到 `documents.automation_plan` 指定的路径：
-1. 明确区分「系统测试自动化方案」和「单元测试自动化方案」两个章节
-2. 每条方案包含：
-   - 对应测试例编号
-   - 测试脚本模板（函数名、步骤伪代码）
-   - 断言策略（验证方式）
-   - 前置条件准备（测试数据、环境配置）
-   - 是否可自动化的判断（不可自动化则标注原因，标记为手工测试）
-3. 单元测试框架指定为 Qt Test
+4. 若任务过大，拆分为多轮 task，不得一次覆盖全仓。
 
-## 第六步：覆盖率检查
-1. 对照需求文档，检查系统测试例是否覆盖所有需求点
-2. 对照详细设计，检查单元测试例是否覆盖所有标注接口
-3. 输出覆盖率统计摘要
+输出：
+- `.smartroute/task.md`
+- 触发主线命令：`/project:test-loop`

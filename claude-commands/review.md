@@ -1,40 +1,12 @@
-# 项目代码 Review（opus 模型专用）
+﻿# 阶段10：代码 Review（Reviewer / CLI）
 
-> **路径规则**：所有文档路径以 `smartroute.config.json` 中的 `documents` 配置为准，不要使用硬编码路径。
+> 路径以 `smartroute.config.json.documents` 为准。
 
-## 第一步：读取配置
-1. 读取 `smartroute.config.json` 中 `documents` 配置，确定以下路径：
-   - `requirements_dir`：需求文档目录
-   - `detailed_design`：详细设计文档路径
-   - `system_test_cases`：系统测试用例路径
-   - `review_dir`：Review 报告输出目录
+执行：
+1. 对照需求、设计、测试文档做一致性审查。
+2. 重点检查：功能缺失、边界风险、安全问题、测试不足。
+3. 按严重度输出问题清单。
 
-## 第二步：执行 Review
-参照以上文档，执行全面的代码 Review：
-1. **需求覆盖度**：逐条检查需求点，确认代码是否全部实现
-2. **代码质量**：命名规范、代码结构、可读性、重复代码
-3. **缺陷分析**：潜在的 Bug、边界条件未处理、异常处理不足
-4. **性能问题**：算法复杂度、内存泄漏风险、不必要的 I/O
-5. **安全风险**：输入校验、权限控制、敏感信息处理
-6. **测试充分性**：对照系统测试例，评估测试覆盖是否足够
-
-## 第三步：输出报告
-输出 Review 报告到 `documents.review_dir` 目录下的 `review-report-{日期}.md`，格式：
-
-# Code Review 报告
-## 概要
-- Review 日期
-- 涉及文件数/代码行数
-- 问题总数（按严重程度分类）
-
-## 需求覆盖度
-| 需求编号 | 需求描述 | 是否实现 | 备注 |
-
-## 发现的问题
-### 严重（必须修复）
-### 中等（建议修复）
-### 轻微（可选优化）
-
-## 性能建议
-## 测试建议
-## 总结
+输出：
+- `documents.review_dir/review-report-{日期}.md`
+- 若存在问题，进入阶段11：`/project:review-fix`

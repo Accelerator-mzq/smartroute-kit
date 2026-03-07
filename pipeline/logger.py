@@ -9,7 +9,7 @@ SmartRoute: Claude Code + Python 编排脚本整合方案
 import os
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 
 class PipelineLogger:
@@ -27,13 +27,21 @@ class PipelineLogger:
         "reset": "\033[0m",
     }
 
-    def __init__(self, log_dir: str = ".pipeline"):
+    def __init__(
+        self,
+        log_dir: str = ".pipeline/logs",
+        runtime_log_hook: Optional[Callable[[str, str, str], None]] = None,
+        observability=None,
+    ):
         self.log_dir = log_dir
         os.makedirs(log_dir, exist_ok=True)
         self.log_file = os.path.join(
             log_dir, f"test-loop-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         )
         self.events = []
+        self.current_phase = ""
+        self.runtime_log_hook = runtime_log_hook
+        self.observability = observability
 
     def _color(self, text: str, color: str) -> str:
         if sys.stdout.isatty():
@@ -52,9 +60,20 @@ class PipelineLogger:
             f.write(log_line + "\n")
 
         self.events.append({"time": timestamp, "level": level, "message": message})
+        if self.runtime_log_hook:
+            try:
+                self.runtime_log_hook(message, level, self.current_phase)
+            except Exception:
+                pass
+        if self.observability is not None:
+            try:
+                self.observability.record_runtime(level, message, self.current_phase)
+            except Exception:
+                pass
 
     def phase(self, phase_name: str):
         """记录阶段切换"""
+        self.current_phase = phase_name
         separator = "━" * 60
         self._write("")
         self._write(separator)
@@ -127,7 +146,7 @@ class PipelineLogger:
 |------|-----|
 | 最终状态 | {state.get('final_status', '未知')} |
 | 总循环次数 | {state.get('loop_count', 0)} |
-| 当前模型 | {state.get('current_model', '未知')} |
+| 当前角色 | {state.get('current_role', state.get('current_model', '未知'))} |
 | 漏测反思 | {'已完成' if state.get('reflection_done') else '未执行'} |
 
 ## 升级历史

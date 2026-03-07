@@ -1,27 +1,74 @@
 {
-  "_说明": "SmartRoute 统一配置文件 — 所有模型、Key、命令的唯一修改入口",
-  "_文档": "修改此文件后运行 python .pipeline/setup.py 即可同步到所有组件",
-  "models": {
-    "strong": {
-      "_说明": "强模型 — 用于需求分析、设计、Review、疑难问题诊断",
-      "name": "claude-opus-4-6",
+  "_说明": "SmartRoute V3 统一配置文件。角色、运行时、状态机与观测都在这里管理",
+  "_文档": "修改此文件后运行 python pipeline/setup.py（或安装版 python .pipeline/setup.py）同步配置",
+  "roles": {
+    "_说明": "V3.0 后台兵工厂角色配置：planner/coder/test_coder/fixer/debug_expert",
+    "planner": {
+      "name": "claude-sonnet-4-5",
       "provider_type": "anthropic",
       "api_key": "填入你的 API Key",
       "base_url": "https://api.anthropic.com",
       "temperature": 0.2,
       "max_tokens": 8192
     },
-    "fast": {
-      "_说明": "快模型 — 用于编码、测试、常规修复、日常提问",
+    "coder": {
       "name": "MiniMax-M2.5-highspeed",
       "provider_type": "openai",
       "api_key": "填入你的 API Key",
       "base_url": "https://api.minimaxi.com/v1",
       "temperature": 0.1,
       "max_tokens": 4096
+    },
+    "test_coder": {
+      "name": "MiniMax-M2.5-highspeed",
+      "provider_type": "openai",
+      "api_key": "填入你的 API Key",
+      "base_url": "https://api.minimaxi.com/v1",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    },
+    "fixer": {
+      "name": "MiniMax-M2.5-highspeed",
+      "provider_type": "openai",
+      "api_key": "填入你的 API Key",
+      "base_url": "https://api.minimaxi.com/v1",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    },
+    "debug_expert": {
+      "name": "claude-opus-4-6",
+      "provider_type": "anthropic",
+      "api_key": "填入你的 API Key",
+      "base_url": "https://api.anthropic.com",
+      "temperature": 0.2,
+      "max_tokens": 8192
     }
   },
+  "engine_settings": {
+    "_说明": "Python orchestrator 状态机与上下文策略",
+    "max_retries": 3,
+    "max_loops": 30,
+    "context_limit": 12000
+  },
+  "runtime": {
+    "_说明": "编译/测试执行命令与超时",
+    "compile_command": "make -j4",
+    "test_command": "./bin/system_tests",
+    "unit_test_command": "./bin/unit_tests",
+    "test_timeout_seconds": 120
+  },
+  "artifact_policy": {
+    "_说明": "工件归档策略",
+    "mode": "per_execution"
+  },
+  "logging": {
+    "_说明": "Observability 开关",
+    "enabled": true,
+    "capture_prompts": true,
+    "capture_responses": true
+  },
   "project": {
+    "_说明": "兼容字段，旧脚本仍可读取。推荐改 runtime + engine_settings",
     "compile_command": "make -j4",
     "test_command": "./bin/system_tests",
     "unit_test_command": "./bin/unit_tests",
@@ -41,18 +88,13 @@
     "system_test_code_dir": "tests/system",
     "unit_test_code_dir": "tests/src"
   },
+  "routing": {
+    "_说明": "V3 路由策略。推荐 workflow_split：在工作流层分流，不依赖本地代理翻译",
+    "strategy": "workflow_split"
+  },
   "proxy": {
-    "_说明": "网络代理配置（翻墙），留空表示不使用",
+    "_说明": "网络代理配置，留空表示不使用",
     "http_proxy": "",
     "https_proxy": ""
-  },
-  "ccm": {
-    "_说明": "CCM 路由代理配置，通过 Web UI (http://127.0.0.1:13456) 管理",
-    "port": 13456,
-    "注意事项": [
-      "MiniMax 必须在 CCM 中配置为 openai 类型（非 anthropic 类型）",
-      "Custom Endpoint 填 base_url 的值",
-      "详见 docs/pitfalls.md"
-    ]
   }
 }
