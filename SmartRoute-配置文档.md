@@ -1,81 +1,153 @@
 # SmartRoute V3.0 配置文档
 
-## 1. 角色划分
+## 配置步骤
 
-### 前台指挥部（CLI，强模型）
+### 步骤 1：初始化项目
 
-- Assistant（问答）
-- PM（需求分析）
-- Architect（设计文档）
-- QA Lead（测试任务交接）
-- Reviewer（代码审查）
-- DevOps（提交与发布）
+```bash
+bash smartroute-kit/init-smartroute.sh /path/to/your/project
+cd /path/to/your/project
+```
 
-### 后台兵工厂（Python Orchestrator）
+如果你当前就在 `smartroute-kit` 仓库中测试，也可直接：
 
-- Planner（任务拆解）
-- Coder（业务编码）
-- Test Coder（测试编码）
-- Runtime（本地编译/测试执行）
-- Fixer（失败修复）
-- Debug Expert（超限会诊）
+```bash
+bash init-smartroute.sh .
+```
 
-## 2. 配置结构
+### 步骤 2：编辑统一配置 `smartroute.config.json`
+
+V3.0 只保留 `roles`，不再使用 `models.fast/models.strong`。
 
 ```json
 {
   "roles": {
-    "planner": {},
-    "coder": {},
-    "test_coder": {},
-    "fixer": {},
-    "debug_expert": {}
+    "planner": {
+      "name": "claude-sonnet-4-5",
+      "provider_type": "anthropic",
+      "api_key": "填入你的 Planner Key",
+      "base_url": "https://api.anthropic.com",
+      "temperature": 0.2,
+      "max_tokens": 8192
+    },
+    "coder": {
+      "name": "MiniMax-M2.5-highspeed",
+      "provider_type": "openai",
+      "api_key": "填入你的 Coder Key",
+      "base_url": "https://api.minimaxi.com/v1",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    },
+    "test_coder": {
+      "name": "MiniMax-M2.5-highspeed",
+      "provider_type": "openai",
+      "api_key": "填入你的 Test Coder Key",
+      "base_url": "https://api.minimaxi.com/v1",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    },
+    "fixer": {
+      "name": "MiniMax-M2.5-highspeed",
+      "provider_type": "openai",
+      "api_key": "填入你的 Fixer Key",
+      "base_url": "https://api.minimaxi.com/v1",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    },
+    "debug_expert": {
+      "name": "claude-opus-4-6",
+      "provider_type": "anthropic",
+      "api_key": "填入你的 Debug Expert Key",
+      "base_url": "https://api.anthropic.com",
+      "temperature": 0.2,
+      "max_tokens": 8192
+    }
   },
-  "engine_settings": {},
-  "runtime": {},
-  "artifact_policy": {},
-  "logging": {},
-  "documents": {}
+  "runtime": {
+    "compile_command": "mingw32-make",
+    "test_command": "./bin/system_tests.exe",
+    "unit_test_command": "./bin/unit_tests.exe",
+    "test_timeout_seconds": 120
+  },
+  "engine_settings": {
+    "max_retries": 3,
+    "max_loops": 30,
+    "context_limit": 12000
+  },
+  "artifact_policy": {
+    "mode": "per_execution"
+  },
+  "logging": {
+    "enabled": true,
+    "capture_prompts": true,
+    "capture_responses": true
+  }
 }
 ```
 
-## 3. roles 说明
+#### 📌 高级配置项补充说明：
+1. **`temperature` & `max_tokens`**: 每个角色都支持精准控制响应的随机性和长度。执行重体力活的 `coder`/`fixer` 推荐 `0.1`，负责顶层设计的角色推荐 `0.2`。
+2. **`artifact_policy`**: 产物快照策略（默认 `per_execution`）。启用后，AI 每一次失败尝试生成的代码都会被快照归档到 `.smartroute/artifacts`，这是时间旅行（Time Travel / 回滚）核心基石。
+3. **`logging`**: 可观测系统。打开 `capture_prompts` 可以实现 Token 全链路追踪并写入 `.pipeline/logs`，方便复盘 AI 写出坏代码的上下文环境。
+4. **`context_limit`**: 防止上下文撑爆报错，控制丢给 AI 的报错日志/物理文件的上限（硬截断）。
 
-- `planner`：建议强模型（anthropic）
-- `coder`：建议快模型（openai）
-- `test_coder`：建议快模型（openai）
-- `fixer`：建议快模型（openai）
-- `debug_expert`：建议强模型（anthropic）
 
-## 4. 任务交接
+`documents` 配置块用于统一管理文档路径，例如：
 
-文件：`.smartroute/task.md`
+```json
+{
+  "documents": {
+    "requirements_dir": "docs/requirements",
+    "overview_design": "docs/design/overview-design.md",
+    "detailed_design": "docs/design/detailed-design.md",
+    "system_test_cases": "docs/test/system-test-cases.md",
+    "unit_test_cases": "docs/test/unit-test-cases.md",
+    "automation_plan": "docs/test/automation-plan.md",
+    "review_dir": "docs/review",
+    "system_test_code_dir": "tests/system",
+    "unit_test_code_dir": "tests/src"
+  }
+}
+```
+
+路径统一入口说明：
+- Python 流水线执行时会读取 `documents` 最新配置。
+- Claude Code 命令中的路径约定也以 `documents` 为准。
+
+### 步骤 3：同步配置
+
+```bash
+python .pipeline/setup.py --check
+python .pipeline/setup.py
+```
+
+该命令会生成/更新 `.env` 和 `CLAUDE.md`。
+
+### 步骤 4：执行任务流水线
+
+先创建 `.smartroute/task.md`：
 
 ```markdown
 [Task Objective]
-...
+实现 xxx 功能
 
 [Strict Rules]
-...
+- 不修改公共接口签名
+- 仅允许修改目标文件
 
 [Target Files]
 - src/xxx.cpp
 ```
 
-Planner 会据此生成 `.smartroute/Execution_Plan.json`。
-
-## 5. 执行命令
-
-源仓：
+再执行：
 
 ```bash
-python pipeline/setup.py
-python pipeline/test_loop.py --project-dir . --task .smartroute/task.md
+python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md
 ```
 
-安装版：
+可选：
 
 ```bash
-python .pipeline/setup.py
-python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md
+python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md --bug-report "复现步骤..."
+python .pipeline/test_loop.py --project-dir . --resume .pipeline/last-state.json
 ```
