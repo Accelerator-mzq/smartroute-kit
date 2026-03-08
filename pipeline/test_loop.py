@@ -493,7 +493,7 @@ def main():
     if sys.platform == "win32":
         import subprocess
         try:
-            ps_cmd = f'Write-Host "\n>>> SmartRoute 后台实时监控中心 [任务ID: {execution_id}] <<<" -ForegroundColor Cyan; Write-Host "==========================================================" -ForegroundColor Cyan; Get-Content -Path "{log.log_file}" -Wait -Tail 30'
+            ps_cmd = f'Write-Host "\n>>> SmartRoute 后台实时监控中心 [任务ID: {execution_id}] <<<" -ForegroundColor Cyan; Write-Host "==========================================================" -ForegroundColor Cyan; Get-Content -Path "{log.log_file}" -Encoding UTF8 -Wait -Tail 30'
             subprocess.Popen(
                 ["powershell", "-NoExit", "-NoProfile", "-Command", ps_cmd],
                 creationflags=subprocess.CREATE_NEW_CONSOLE
