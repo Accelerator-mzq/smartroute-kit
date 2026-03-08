@@ -55,6 +55,9 @@ class ObservabilitySystem:
             self.trace_file.write_text("", encoding="utf-8")
         if not self.error_file.exists():
             self.error_file.write_text("", encoding="utf-8")
+            
+        # 统计每个角色的 token 消耗: {"coder": {"in": 0, "out": 0, "latency_ms": 0, "calls": 0}, ...}
+        self.token_usage = {}
 
     def record_event(self, kind: str, payload: Dict):
         if not self.enabled:
@@ -115,6 +118,13 @@ class ObservabilitySystem:
                 "raw": usage,
             },
         }
+
+        if role not in self.token_usage:
+            self.token_usage[role] = {"in": 0, "out": 0, "latency_ms": 0, "calls": 0}
+        self.token_usage[role]["in"] += in_tokens
+        self.token_usage[role]["out"] += out_tokens
+        self.token_usage[role]["latency_ms"] += payload["latency_ms"]
+        self.token_usage[role]["calls"] += 1
 
         if self.capture_prompts:
             payload["system_prompt"] = event.get("system_prompt", "")

@@ -173,4 +173,31 @@ class PipelineLogger:
 | 升级 | {sum(1 for e in self.events if e['level'] == 'ESCALATION')} |
 | 错误 | {sum(1 for e in self.events if e['level'] == 'ERROR')} |
 """
+
+        # Append Token Usage Summary if observability is available
+        if self.observability is not None and hasattr(self.observability, "token_usage") and self.observability.token_usage:
+            report += "\n## Token 消耗与统计\n\n"
+            report += "| 角色 (Role) | 调用次数 | 输入 Tokens | 输出 Tokens | 耗时 (Latency) |\n"
+            report += "|-------------|----------|-------------|-------------|----------------|\n"
+            total_in = 0
+            total_out = 0
+            total_latency = 0
+            total_calls = 0
+            
+            for role, stats in sorted(self.observability.token_usage.items()):
+                in_tok = stats.get("in", 0)
+                out_tok = stats.get("out", 0)
+                calls = stats.get("calls", 0)
+                latency = stats.get("latency_ms", 0) / 1000.0  # seconds
+                
+                total_in += in_tok
+                total_out += out_tok
+                total_calls += calls
+                total_latency += latency
+                
+                report += f"| {role} | {calls} | {in_tok:,} | {out_tok:,} | {latency:.2f}s |\n"
+                
+            report += f"| **总计 (Total)** | **{total_calls}** | **{total_in:,}** | **{total_out:,}** | **{total_latency:.2f}s** |\n\n"
+            report += "> 注：Token 消耗为平台预估值，未计价。具体费用请参考各模型服务商定价明细。\n"
+
         return report
