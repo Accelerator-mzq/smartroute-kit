@@ -212,6 +212,13 @@ def run_test_loop(state: TestLoopState, log: PipelineLogger) -> TestLoopState:
         set_phase("planning", PipelinePhase.PLANNING)
         log.node_start("Planner 生成执行计划", "planner")
         state = planner_generate_execution_plan_node(state)
+
+        if state.get("planner_failed"):
+            log.node_end("Planner 生成执行计划", False, "API 连接超时或大模型报错，详情见上文")
+            log.error("🚨 Planner 大脑连接失败！框架拒绝加载无意义的默认兜底计划，流水线已紧急截断！请修复网络或 API Key 后重试。")
+            state["final_status"] = "aborted"
+            return state
+
         plan_ok = bool(state.get("execution_plan"))
         log.node_end("Planner 生成执行计划", plan_ok)
 

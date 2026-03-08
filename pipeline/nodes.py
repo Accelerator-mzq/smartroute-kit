@@ -186,9 +186,8 @@ JSON 格式:
 
     response = call_model("planner", system_prompt, user_message, max_tokens=4096)
     if response.startswith("[ERROR]"):
-        print(f"  ⚠️ Planner 调用失败，使用默认计划: {response[:160]}")
-        graph = TaskGraphEngine.create_default(objective, target_files)
-        state["execution_plan"] = graph.to_dict()
+        print(f"  ⚠️ Planner 调用失败: {response[:160]}")
+        state["planner_failed"] = True
     else:
         json_text = _extract_json_from_response(response)
         try:
