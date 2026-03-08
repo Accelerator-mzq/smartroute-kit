@@ -12,7 +12,7 @@ SmartRoute: Claude Code + Python 编排脚本整合方案
   python3 test_loop.py --project-dir . --task .smartroute/task.md
 
   在 Claude Code 中通过自定义命令触发:
-  /project:test-loop
+  /test-loop
 """
 
 import argparse

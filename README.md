@@ -60,21 +60,21 @@ python .pipeline/setup.py
 框架在 `claude-commands/` 目录下提供了一套严格映射 **12阶段主线研发流程** 的专属拓展指令（Skills）：
 
 ### 📝 1. 前期规划阶段（前台执行）
-- **`/project:assistant`**：日常代码问答与助手。
-- **`/project:requirements`**：**需求分析阶段**。强制要求前台 AI 输出标准格式的 PRD 需求文档。
-- **`/project:design`**：**架构设计阶段**。根据需求，输出标准的架构设计文档和数据结构。
-- **`/project:test-plan`**：**测试方案阶段**（或用 `/project:code`）。将你的需求翻译成后台流水线看得懂的机器工单，即写入 `.smartroute/task.md`。
+- **`/assistant`**：日常代码问答与助手。
+- **`/requirements`**：**需求分析阶段**。强制要求前台 AI 输出标准格式的 PRD 需求文档。
+- **`/design`**：**架构设计阶段**。根据需求，输出标准的架构设计文档和数据结构。
+- **`/test-plan`**：**测试方案阶段**（或用 `/code`）。将你的需求翻译成后台流水线看得懂的机器工单，即写入 `.smartroute/task.md`。
 
-*(注：如果你已经有写好的设计文档图纸或 UI 图，可直接在对话中将文件发给 AI，并调用 `/project:test-plan` 直接生成后台工单，**跨过前 3 个阶段**！)*
+*(注：如果你已经有写好的设计文档图纸或 UI 图，可直接在对话中将文件发给 AI，并调用 `/test-plan` 直接生成后台工单，**跨过前 3 个阶段**！)*
 
 ### ⚙️ 2. 后台全自动落地阶段（核心！）
-- **`/project:test-loop`**：**兵工厂主线**。这是整个 V3.0 最核心的魔法！
+- **`/test-loop`**：**兵工厂主线**。这是整个 V3.0 最核心的魔法！
   这将在后台唤起完整生命周期流程：`[Planner 拆解] -> [Coder 编码] -> [Test Coder 写测] -> [Runtime 测试] -> [Fixer 排错]`。后台的 5 个 AI 会自动完成无尽循环，直到全部测试通过 `[SUCCESS]`。
 
 ### 👀 3. 验收与发版阶段
-- **`/project:review`**：测试跑通后，进行最终的 Code Review。
-- **`/project:review-fix`**：根据 Review 意见生成新的修复工单重入循环。
-- **`/project:git-push`**：发版，自动生成规范提交信息并推送到 Git。
+- **`/review`**：测试跑通后，进行最终的 Code Review。
+- **`/review-fix`**：根据 Review 意见生成新的修复工单重入循环。
+- **`/git-push`**：发版，自动生成规范提交信息并推送到 Git。
 
 ### 开发模式 2：手动单次调用
 你也可以通过在控制台主动注入任务目标来开启后台引擎：

@@ -155,15 +155,15 @@ python .pipeline/test_loop.py --project-dir . --resume .pipeline/last-state.json
 ### 🌟 附录：Claude Code 专属 Skills 指令映射
 
 如果你是在前台使用 Claude Code CLI 进行驱动，本项目在 `claude-commands/` 目录下提供了一套严格映射 12 阶段主线研发的专属技能（Skills）。
-你可以直接在对话框输入这些 `/project:` 开头的命令，以“动口不动手”的方式完成开发闭环：
+你可以直接在对话框输入这些 `/` 开头的命令，以“动口不动手”的方式完成开发闭环：
 
 | 阶段 | 角色 | 触发指令 | 预期产出 |
 |---|---|---|---|
-| 1. 需求分析 | PM | `/project:requirements` | 生成需求文档 |
-| 2. 架构设计 | Architect | `/project:design` | 生成详细设计文档 |
-| 3. 测试方案 | QA Lead | `/project:test-plan` 或 `/project:code` | 生成任务执行单 `.smartroute/task.md` |
-| **4. 自动研发闭环** | **全自动后台引擎** | **`/project:test-loop`** | **[核心] 执行 编码->测试->修包 的无尽循环** |
-| 5. 代码审查 | Reviewer | `/project:review` | Review 报告与修复意见 |
-| 6. 代码提交 | DevOps | `/project:git-push` | 汇总 Commits 并 Push |
+| 1. 需求分析 | PM | `/requirements` | 生成需求文档 |
+| 2. 架构设计 | Architect | `/design` | 生成详细设计文档 |
+| 3. 测试方案 | QA Lead | `/test-plan` 或 `/code` | 生成任务执行单 `.smartroute/task.md` |
+| **4. 自动研发闭环** | **全自动后台引擎** | **`/test-loop`** | **[核心] 执行 编码->测试->修包 的无尽循环** |
+| 5. 代码审查 | Reviewer | `/review` | Review 报告与修复意见 |
+| 6. 代码提交 | DevOps | `/git-push` | 汇总 Commits 并 Push |
 
-**最佳实践**：日常开发中，如果你已经有了设计文档或 UI 截图，可直接调用 `/project:test-plan` 生成工单，然后运行 `/project:test-loop` 挂机等待测试通过即可。
+**最佳实践**：日常开发中，如果你已经有了设计文档或 UI 截图，可直接调用 `/test-plan` 生成工单，然后运行 `/test-loop` 挂机等待测试通过即可。

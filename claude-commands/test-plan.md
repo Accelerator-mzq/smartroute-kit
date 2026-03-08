@@ -26,4 +26,4 @@ description: ﻿# 阶段4：测试任务交接（QA Lead / CLI）
 
 输出：
 - `.smartroute/task.md`
-- 触发主线命令：`/project:test-loop`
+- 触发主线命令：`/test-loop`

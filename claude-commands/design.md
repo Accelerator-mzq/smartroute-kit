@@ -14,4 +14,4 @@ description: ﻿# 阶段3：设计文档（Architect / CLI）
 
 输出：
 - 设计文档覆盖矩阵（需求->模块->接口）。
-- 下一阶段建议：`/project:test-plan`。
+- 下一阶段建议：`/test-plan`。

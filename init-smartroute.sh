@@ -47,7 +47,7 @@ echo -e "  ${GREEN}✓ Python 脚本已安装到 .pipeline/${NC}"
 echo -e "${BOLD}[4/5] 安装自定义命令${NC}"
 for f in "$SCRIPT_DIR"/claude-commands/*.md; do
     [ -f "$f" ] && cp "$f" ".claude/commands/$(basename "$f")"
-    echo -e "  ✓ /project:$(basename "$f" .md)"
+    echo -e "  ✓ /$(basename "$f" .md)"
 done
 
 # 复制文档
