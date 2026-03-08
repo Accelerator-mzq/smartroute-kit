@@ -152,8 +152,10 @@ def parse_task_file(task_path: str) -> dict:
     current = None
     for raw_line in content.splitlines():
         line = raw_line.strip().lstrip("\ufeff")
-        if line.startswith("[") and line.endswith("]"):
-            key = line[1:-1].strip()
+        # 兼容 Markdown 标题格式，如 "## [Task Objective]"
+        line_clean = line.lstrip("#").strip()
+        if line_clean.startswith("[") and line_clean.endswith("]"):
+            key = line_clean[1:-1].strip()
             current = key if key in sections else None
             continue
         if current:
