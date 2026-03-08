@@ -25,6 +25,34 @@ from typing import Tuple
 # 确保能导入同目录模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+def _load_env_file(env_path: str) -> None:
+    """Load KEY=VALUE pairs from .env into os.environ without overriding existing vars."""
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as env_file:
+            for line in env_file:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+
+                key, val = line.split("=", 1)
+                key = key.strip()
+                if key.startswith("export "):
+                    key = key[len("export "):].strip()
+
+                if not key or key in os.environ:
+                    continue
+
+                os.environ[key] = val.strip().strip("'\"")
+    except OSError:
+        # Keep startup resilient even when .env has permission/encoding issues.
+        return
+
+
+# Load .env from current working directory as an early fallback.
+_load_env_file(os.path.join(os.getcwd(), ".env"))
+
 from state import TestLoopState, create_initial_state, save_state
 from router import (
     route_after_compile, route_after_test, route_after_reflection,
@@ -456,6 +484,7 @@ def main():
     args = parser.parse_args()
 
     project_dir = os.path.abspath(args.project_dir)
+    _load_env_file(os.path.join(project_dir, ".env"))
     runtime_cfg = load_project_runtime_config(project_dir)
     compile_cmd = args.compile_cmd or runtime_cfg["compile_command"]
     test_cmd = args.test_cmd or runtime_cfg["test_command"]
