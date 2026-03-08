@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段4（别名）：任务交接（QA Lead / CLI）
+---
+
 ﻿# 阶段4（别名）：任务交接（QA Lead / CLI）
 
 说明：此命令与 `/project:test-plan` 同属阶段4，保留别名以兼容旧习惯。

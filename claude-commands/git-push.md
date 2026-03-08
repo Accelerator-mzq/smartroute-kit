@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段12：上传 Git（DevOps / CLI）
+---
+
 ﻿# 阶段12：上传 Git（DevOps / CLI）
 
 执行：

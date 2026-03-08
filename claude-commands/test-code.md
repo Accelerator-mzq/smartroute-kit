@@ -1,3 +1,7 @@
+---
+description: ﻿# 辅助命令：阶段7 测试编码（Test Coder / Python）
+---
+
 ﻿# 辅助命令：阶段7 测试编码（Test Coder / Python）
 
 说明：仅在主线 test-loop 无法覆盖特殊测试框架时使用。

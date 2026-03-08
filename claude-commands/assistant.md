@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段1：日常提问（Assistant / CLI）
+---
+
 ﻿# 阶段1：日常提问（Assistant / CLI）
 
 用途：基础技术问答与解释，不涉及工程文件修改。

@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段5-9：兵工厂自动执行（Python Orchestrator）
+---
+
 ﻿# 阶段5-9：兵工厂自动执行（Python Orchestrator）
 
 此命令是主线入口，严格覆盖阶段5-9：

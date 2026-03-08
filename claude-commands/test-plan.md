@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段4：测试任务交接（QA Lead / CLI）
+---
+
 ﻿# 阶段4：测试任务交接（QA Lead / CLI）
 
 > 目标：生成交接书 `.smartroute/task.md`，作为 Python 兵工厂入口。

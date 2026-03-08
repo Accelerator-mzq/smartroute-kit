@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段3：设计文档（Architect / CLI）
+---
+
 ﻿# 阶段3：设计文档（Architect / CLI）
 
 > 路径以 `smartroute.config.json.documents` 为准。

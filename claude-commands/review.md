@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段10：代码 Review（Reviewer / CLI）
+---
+
 ﻿# 阶段10：代码 Review（Reviewer / CLI）
 
 > 路径以 `smartroute.config.json.documents` 为准。

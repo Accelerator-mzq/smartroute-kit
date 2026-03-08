@@ -1,3 +1,7 @@
+---
+description: ﻿# 阶段2：需求分析（PM / CLI）
+---
+
 ﻿# 阶段2：需求分析（PM / CLI）
 
 > 路径以 `smartroute.config.json.documents` 为准。
