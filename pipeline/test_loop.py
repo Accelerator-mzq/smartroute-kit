@@ -489,6 +489,18 @@ def main():
         observability=observability,
     )
 
+    # [新特性] Windows 下自动弹出独立监控控制台
+    if sys.platform == "win32":
+        import subprocess
+        try:
+            ps_cmd = f'Write-Host "\n>>> SmartRoute 后台实时监控中心 [任务ID: {execution_id}] <<<" -ForegroundColor Cyan; Write-Host "==========================================================" -ForegroundColor Cyan; Get-Content -Path "{log.log_file}" -Wait -Tail 30'
+            subprocess.Popen(
+                ["powershell", "-NoExit", "-NoProfile", "-Command", ps_cmd],
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+        except Exception as e:
+            log.info(f"无法启动实时监控窗口: {e}")
+
     log.phase("SmartRoute 自动化测试循环启动")
     log.info(f"项目目录: {project_dir}")
     log.info(f"执行批次: {execution_id}")
