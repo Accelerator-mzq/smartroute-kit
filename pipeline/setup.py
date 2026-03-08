@@ -147,9 +147,9 @@ def generate_env(config: dict, project_root: Path):
     env_path = project_root / ".env"
 
     existing_cmds = _load_existing_commands(env_path)
-    compile_cmd = existing_cmds.get("COMPILE_COMMAND", runtime_cfg["compile_command"])
-    test_cmd = existing_cmds.get("TEST_COMMAND", runtime_cfg["test_command"])
-    unit_test_cmd = existing_cmds.get("UNIT_TEST_COMMAND", runtime_cfg["unit_test_command"])
+    compile_cmd = runtime_cfg["compile_command"]
+    test_cmd = runtime_cfg["test_command"]
+    unit_test_cmd = runtime_cfg["unit_test_command"]
 
     planner = roles["planner"]
     coder = roles["coder"]
