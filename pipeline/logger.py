@@ -11,6 +11,17 @@ import sys
 from datetime import datetime
 from typing import Callable, Optional
 
+# 修复 Windows GBK 编码问题，支持 emoji 输出但防止中文字符乱码
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(errors='replace')
+        sys.stderr.reconfigure(errors='replace')
+    except AttributeError:
+        # Python < 3.7 fallback
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, errors='replace')
+
 
 class PipelineLogger:
     """流水线日志记录器"""
