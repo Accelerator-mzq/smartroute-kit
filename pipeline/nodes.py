@@ -151,7 +151,8 @@ def planner_generate_execution_plan_node(state: TestLoopState) -> TestLoopState:
     files_text = "\n".join(f"- {f}" for f in target_files) if target_files else "- （未指定）"
 
     system_prompt = """你是 SmartRoute Planner（规划师）。
-请基于任务目标拆解出可执行原子步骤，输出严格 JSON，不要输出解释文字。
+你的输出必须是纯 JSON 格式，不要有任何其他文字。
+直接输出 JSON，不要用代码块包裹，不要有任何解释。
 JSON 格式:
 {
   "nodes":[
