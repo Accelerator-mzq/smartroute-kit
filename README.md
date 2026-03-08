@@ -1,148 +1,101 @@
-# SmartRoute V3.0
+# SmartRoute V3.0 自动化编程与协作框架
 
-SmartRoute V3.0 是「Claude Code 前台 + Python Orchestrator 后台」的任务协作框架。  
-V3.0 只保留 `roles` 配置，不再使用 CCM，不再使用 `models.fast/models.strong`。
+SmartRoute V3.0 是新一代**「前台对话指挥 + 后台多智能体（Multi-Agent）流水线执行」**的工程协作框架。
+通过统一的 JSON 配置与一套 Python Orchestrator 引擎，将繁琐的“修改代码、本地编译、跑单元测试、修语法 Bug”整个闭环交由背后的 AI 角色自动完成。开发者只需专注于需求对话与高层架构设计。
 
-## 配置步骤
+---
 
-### 步骤 1：初始化项目（推荐业务仓）
+## 🌟 核心特性与架构
 
+- **角色解耦 (Roles)**：不再依赖单一模型。细分 Planner, Coder, Test Coder, Fixer, Debug Expert 等身份，允许为不同难度阶段灵活指派最合适的模型（如 Claude 4.5 负责规划与架构，高吞吐低延迟的 MiniMax 负责底层代码敲击）。
+- **统一化配置管理**：抛弃繁杂的 `.env` 变量拼凑，单凭一个 `smartroute.config.json` 文件即可管理所有 AI Keys、编译运行命令和引擎状态机策略。
+- **沙盒与版本管理 (Artifact Policy)**：每次编译失败都能进行安全的代码物理回溯防破坏，并支持生成观测日志供后续溯源。
+
+---
+
+## 🚀 业务仓接入与初始化
+
+将 SmartRoute V3.0 注入到你的任意代码仓中非常简单：
+
+### 步骤 1：植入并初始化流水线
 ```bash
+# 将框架套件植入到你的目标项目下
 bash smartroute-kit/init-smartroute.sh /path/to/your/project
 cd /path/to/your/project
 ```
 
-### 步骤 2：编辑统一配置 `smartroute.config.json`
+### 步骤 2：编辑统一配置文件
+在目标项目根目录下编辑生成的 `smartroute.config.json` 文件，并至少配齐 5 种处理层角色的 API 密钥，以及该项目的真实编译和测试指令。
 
-最少填写 5 个角色：
-- `planner`
-- `coder`
-- `test_coder`
-- `fixer`
-- `debug_expert`
+> **示例核心配置片段**：
+> ```json
+> {
+>   "roles": {
+>     "planner": { ... },
+>     "coder": { "name": "MiniMax-M2.5-highspeed", "api_key": "你的Key" },
+>     "test_coder": { ... },
+>     "fixer": { ... },
+>     "debug_expert": { ... }
+>   },
+>   "runtime": {
+>     "compile_command": "cmake --build build -j 8",
+>     "test_command": "powershell -File .\\Run-Test.ps1",
+>     "unit_test_command": "python run_tests.py"
+>   }
+> }
+> ```
 
-每个角色必须有：
-- `name`
-- `provider_type`
-- `api_key`
-- `base_url`
-
-示例：
-
-```json
-{
-  "roles": {
-    "planner": {
-      "name": "claude-sonnet-4-5",
-      "provider_type": "anthropic",
-      "api_key": "填入你的 Key",
-      "base_url": "https://api.anthropic.com"
-    },
-    "coder": {
-      "name": "MiniMax-M2.5-highspeed",
-      "provider_type": "openai",
-      "api_key": "填入你的 Key",
-      "base_url": "https://api.minimaxi.com/v1"
-    },
-    "test_coder": {
-      "name": "MiniMax-M2.5-highspeed",
-      "provider_type": "openai",
-      "api_key": "填入你的 Key",
-      "base_url": "https://api.minimaxi.com/v1"
-    },
-    "fixer": {
-      "name": "MiniMax-M2.5-highspeed",
-      "provider_type": "openai",
-      "api_key": "填入你的 Key",
-      "base_url": "https://api.minimaxi.com/v1"
-    },
-    "debug_expert": {
-      "name": "claude-opus-4-6",
-      "provider_type": "anthropic",
-      "api_key": "填入你的 Key",
-      "base_url": "https://api.anthropic.com",
-      "temperature": 0.2,
-      "max_tokens": 8192
-    }
-  },
-  "runtime": {
-    "compile_command": "make -j4",
-    "test_command": "./bin/system_tests",
-    "unit_test_command": "./bin/unit_tests",
-    "test_timeout_seconds": 120
-  },
-  "engine_settings": {
-    "max_retries": 3,
-    "max_loops": 30,
-    "context_limit": 12000
-  },
-  "artifact_policy": {
-    "mode": "per_execution"
-  },
-  "logging": {
-    "enabled": true,
-    "capture_prompts": true,
-    "capture_responses": true
-  }
-}
-```
-
-> **高阶特性指引**：
-> - `artifact_policy` 控制物理版本回溯能力（Time Travel），避免被次级模型破坏环境。
-> - `logging` 控制 AI 的日志埋点（Observability），启用会带来 `.pipeline/logs` 的链路溯源收益。
-> - `temperature` 及 `max_tokens`：针对具体不同身份模型发散率的精准控制。
-
-### 步骤 3：同步配置
-
+### 步骤 3：同步生效并生成守护结构
 ```bash
-python .pipeline/setup.py --check
+# 执行同步验证，会生成/更新 .env 等必要环境变量和目录
 python .pipeline/setup.py
 ```
+这将在业务仓中生成 `.pipeline/`（运作脚本）与 `.smartroute/`（AI 工作区与编排上下文）等隐藏目录。
 
-作用：
-- 生成/更新 `.env`
-- 更新 `CLAUDE.md`
-- 创建 `.pipeline/` 与 `.smartroute/` 目录
+---
 
-### 步骤 4：运行阶段 5-9 流水线
+## 🤖 自动化流水线使用指南
 
-创建 `.smartroute/task.md`：
+接入成功后，即可在前台系统（如 Claude Code CLI）开启纯“动口”的开发模式：
 
-```markdown
-[Task Objective]
-实现 xxx 功能
+### 开发模式 1：指令/自然对话触发（推荐）
+在对话框中讨论完代码方案后，直接输入快捷指令：
+> **`/project:test-loop`**
 
-[Strict Rules]
-- 不修改公共接口签名
-- 仅允许修改目标文件
+或者用自然语言要求 AI 接管：
+> **“方案敲定，请写入 `.smartroute/task.md` 工单并启动后台 `test_loop.py` 循环。”**
 
-[Target Files]
-- src/xxx.cpp
-- include/xxx.h
-```
+这将在后台唤起完整生命周期流程：`[Planner 解析] -> [Coder 编码] -> [Test Coder 写测] -> [Runtime 编译&集成] -> [Fixer 排错]`，直到项目终端健康反馈 `[SUCCESS]`。
 
-执行：
+### 开发模式 2：手动单次调用
+你也可以通过在控制台主动注入任务目标来开启后台引擎：
 
-```bash
-python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md
-```
+1. 编辑工作单 `.smartroute/task.md`：
+   ```markdown
+   [Task Objective]
+   新增某某模块网络解析功能
+   [Strict Rules]
+   - 禁止修改已有公共接口
+   [Target Files]
+   - src/network.cpp
+   - include/network.h
+   ```
+2. 执行引擎启动脚本：
+   ```bash
+   python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md
+   ```
 
-带 Bug 反思：
+*(如需指定之前测试暴露的错误让 AI 重点修复，可追加参数：`--bug-report "某个严重错误日志" `)*
 
-```bash
-python .pipeline/test_loop.py --project-dir . --task .smartroute/task.md --bug-report "xxx问题"
-```
+---
 
-## `documents` 路径配置
+## 📂 `documents` 路径配置
+项目的文档路径统一由 `smartroute.config.json` 内部的 `documents` 节点映射。这方便不同的项目套件定制各自的架构设计、用例库和 PR 审核归档位置。
 
-`smartroute.config.json` 的 `documents` 是统一路径入口。  
-修改文档路径后，Python 流水线与命令执行时会读取最新配置。
+---
+## 💡 进阶提示
 
-## 源码仓与安装仓
-
-- 源码仓（`smartroute-kit`）：开发框架本体，命令用 `pipeline/...`
-- 安装仓（你的业务项目）：使用框架，命令用 `.pipeline/...`
-
-## 12 阶段命令映射
-
-见 [claude-commands/STAGE-MAP.md](claude-commands/STAGE-MAP.md)。
+1. **引擎日志 (Observability)**：若在配置内开启 `logging.enabled`，底层会将每次编排与大模型产生的 Prompt/响应 全部存档于 `.pipeline/logs` 中，方便人类 Debug AI 脑回路。
+2. **源码仓与业务仓区分**：
+   - 本项目（`smartroute-kit`）为**源码仓**，测试自身脚本用 `pipeline/...`
+   - 当部署到**业务仓**后，为防冲突脚本将前置隐藏点，使用 `.pipeline/...`
