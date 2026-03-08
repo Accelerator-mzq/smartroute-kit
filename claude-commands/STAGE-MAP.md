@@ -11,7 +11,7 @@ description: ﻿# SmartRoute 12阶段命令映射（严格版）
 | 1 | 日常提问 | Assistant | CLI | `/assistant` | 技术答复 |
 | 2 | 需求分析 | PM | CLI | `/requirements` | 需求文档 |
 | 3 | 设计文档 | Architect | CLI | `/design` | 架构/详细设计 |
-| 4 | 测试任务交接 | QA Lead | CLI | `/test-plan`（或`/code`） | `.smartroute/task.md` |
+| 4 | 测试方案与交接 | QA Lead | CLI | `/test-plan`（或`/code`） | 系统测试用例 + 自动化方案 + `task.md` |
 | 5 | 任务拆解 | Planner | Python | `/test-loop` 内部执行 | `Execution_Plan.json` |
 | 6 | 业务编码 | Coder | Python | `/test-loop` 内部执行 | 业务代码 |
 | 7 | 测试编码 | Test Coder | Python | `/test-loop` 内部执行 | 测试代码 |
